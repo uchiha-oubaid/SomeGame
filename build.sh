@@ -1,3 +1,3 @@
 #!/usr/bin/bash
 
-odin build src -out:Test && ./Test
+odin build src -out:build/Test -debug && ./build/Test
