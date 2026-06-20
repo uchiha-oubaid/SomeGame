@@ -5,8 +5,8 @@ import     "core:c"
 import sdl "vendor:sdl2"
 import img "vendor:sdl2/image"
 
-WIDTH :: 800
-HEIGHT :: 600
+WIDTH ::  1000
+HEIGHT :: 900
 FPS :: 60
 DELTA_TIME :f32: 1.0 / FPS
 FONT_ATLAS_WIDTH :: 96
@@ -60,7 +60,7 @@ set_unhexed_color :: proc(renderer: ^sdl.Renderer, hex_color: u32) {
         u8((hex_color >> (8*0)) & 0xFF))
 }
 
-create_texture_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring, color: u32) -> ^sdl.Texture {
+create_texture_from_file :: proc(renderer: ^sdl.Renderer, filepath: cstring, color: u32) -> ^sdl.Texture {
     font_surface := img.Load(filepath)
     if font_surface == nil {
         fmt.println("File does not exist")
@@ -77,7 +77,7 @@ create_texture_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring, col
     return font_texture
 }
 
-create_surface_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring) -> ^sdl.Surface {
+create_surface_from_file :: proc(renderer: ^sdl.Renderer, filepath: cstring) -> ^sdl.Surface {
     font_surface := img.Load(filepath)
     if font_surface == nil {
         fmt.println("File does not exist")
@@ -108,17 +108,30 @@ render_text :: proc(renderer: ^sdl.Renderer, x, y: i32, text: string, scale: i32
             h = FONT_CHAR_HEIGHT*scale
         }
 
-        font_texture := create_texture_from_font(renderer, filepath, color)
+        font_texture := create_texture_from_file(renderer, filepath, color)
         sdl.RenderCopy(renderer, font_texture, &src_rect, &dst_rect);
-        defer sdl.DestroyTexture(font_texture)
+        sdl.DestroyTexture(font_texture)
     }
+}
+
+SPRITE_SIZE :: 17
+
+render_sprite :: proc(renderer: ^sdl.Renderer, col: u32, row: u32, color: u32, spritesheet_filepath: cstring="./assets/spritesheet.png") {
+    spritesheet_texture := create_texture_from_file(renderer, spritesheet_filepath, color)
+    defer sdl.DestroyTexture(spritesheet_texture)
+    src_rect := sdl.Rect {
+        x = i32(col*SPRITE_SIZE),
+        y = i32(row*SPRITE_SIZE),
+        w = SPRITE_SIZE,
+        h = SPRITE_SIZE
+    }
+    sdl.RenderCopyF(renderer, spritesheet_texture, &src_rect, &ball_rect);
 }
 
 pause := false
 score : u64 = 0
 max_score : u64 = 0
 score_step := 1000 // ms
-
 game_state: GameState
 
 render_and_update :: proc(renderer: ^sdl.Renderer, dt: f32) {
@@ -129,7 +142,8 @@ render_and_update :: proc(renderer: ^sdl.Renderer, dt: f32) {
 
         // TODO replace the rect with an actual texture
         set_unhexed_color(renderer, RED)
-        sdl.RenderFillRectF(renderer, &ball_rect)
+        //sdl.RenderFillRectF(renderer, &ball_rect)
+        render_sprite(renderer, 0, 0, WHITE)
 
         set_unhexed_color(renderer, WHITE)
         sdl.RenderFillRectF(renderer, &player_rect)
@@ -187,6 +201,11 @@ render_and_update :: proc(renderer: ^sdl.Renderer, dt: f32) {
         render_text(renderer, 
             i32(WIDTH/2 - text_length/2), i32(HEIGHT/2 - FONT_CHAR_HEIGHT/2), 
             text, i32(scale), WHITE)
+
+        high_score_text := fmt.tprintf("Your score: %v", max_score)
+        render_text(renderer, 
+            i32(WIDTH/2 - text_length/2 - 50), i32(HEIGHT/2 - FONT_CHAR_HEIGHT/2) + 50, 
+            high_score_text, i32(scale), WHITE)
 
         sdl.RenderPresent(renderer)
     }
