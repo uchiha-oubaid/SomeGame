@@ -2,7 +2,6 @@ package main
 
 import     "core:fmt"
 import     "core:c"
-//import math"core:math/linalg/hlsl"
 import sdl "vendor:sdl2"
 import img "vendor:sdl2/image"
 
@@ -19,18 +18,38 @@ FONT_CHAR_HEIGHT :: 8
 FONT_ATLAS_COLS :: 16
 FONT_ATLAS_ROWS :: 6
 
+// COLORS
 RED   ::      0xFF0000FF
 BLACK ::      0x000000FF
 GREEN ::      0x00FF00FF
 WHITE ::      0xFFFFFFFF
 BACKGROUND :: 0x181818FF
+PURPLE ::     0x65577BFF
+// NOTE: This is still for testing
 
 ball_dx, ball_dy :f32 = 1, 1
-ball_rect : sdl.FRect = sdl.FRect {
-    x = 50,
-    y = 10,
+ball_speed :f32 = 500
+ball_rect := sdl.FRect {
+    x = 80,
+    y = 100,
     w = 50,
     h = 50
+}
+
+player_dx, player_dy: f32 = 0, 0
+player_speed : f32 = 700
+player_rect := sdl.FRect {
+    x = 70,
+    y = 50,
+    w = 40,
+    h = 40
+}
+
+
+GameState :: enum {
+    MENU,
+    PLAYING,
+    LOST
 }
 
 set_unhexed_color :: proc(renderer: ^sdl.Renderer, hex_color: u32) {
@@ -38,8 +57,7 @@ set_unhexed_color :: proc(renderer: ^sdl.Renderer, hex_color: u32) {
         u8((hex_color >> (8*3)) & 0xFF),
         u8((hex_color >> (8*2)) & 0xFF),
         u8((hex_color >> (8*1)) & 0xFF),
-        u8((hex_color >> (8*0)) & 0xFF)
-    )
+        u8((hex_color >> (8*0)) & 0xFF))
 }
 
 create_texture_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring, color: u32) -> ^sdl.Texture {
@@ -70,9 +88,7 @@ create_surface_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring) -> 
 }
 
 // NOTE: color format is RRGGBB
-render_text :: proc(renderer: ^sdl.Renderer, x, y: i32, text: string, scale: i32, filepath: cstring="./assets/ascii.png") {
-    //font_surface := create_surface_from_font(renderer, filepath)
-
+render_text :: proc(renderer: ^sdl.Renderer, x, y: i32, text: string, scale: i32, color: u32, filepath: cstring="./assets/ascii.png") {
     for char, index in text {
         char_index := char - 32
         i_index := i32(index)
@@ -92,38 +108,88 @@ render_text :: proc(renderer: ^sdl.Renderer, x, y: i32, text: string, scale: i32
             h = FONT_CHAR_HEIGHT*scale
         }
 
-        font_texture := create_texture_from_font(renderer, filepath, GREEN)
+        font_texture := create_texture_from_font(renderer, filepath, color)
         sdl.RenderCopy(renderer, font_texture, &src_rect, &dst_rect);
         defer sdl.DestroyTexture(font_texture)
     }
 }
 
 pause := false
+score : u64 = 0
+max_score : u64 = 0
+score_step := 1000 // ms
+
+game_state: GameState
+
 render_and_update :: proc(renderer: ^sdl.Renderer, dt: f32) {
-    set_unhexed_color(renderer, BACKGROUND)
-    sdl.RenderClear(renderer)
+    #partial switch game_state {
+    case .PLAYING:
+        set_unhexed_color(renderer, BACKGROUND)
+        sdl.RenderClear(renderer)
 
-    // TODO replace the rect with an actual texture
-    ball_speed :f32 = 500
-    set_unhexed_color(renderer, RED)
-    sdl.RenderFillRectF(renderer, &ball_rect)
-    // -------------------------------------------
+        // TODO replace the rect with an actual texture
+        set_unhexed_color(renderer, RED)
+        sdl.RenderFillRectF(renderer, &ball_rect)
 
-    if !pause {
-        if ball_rect.x < 0 || ball_rect.x + ball_rect.w > WIDTH  {ball_dx *= -1}
-        if ball_rect.y < 0 || ball_rect.y + ball_rect.h > HEIGHT {ball_dy *= -1}
-        ball_rect.x += ball_dx*ball_speed*dt
-        ball_rect.y += ball_dy*ball_speed*dt
-    }
-    else {
+        set_unhexed_color(renderer, WHITE)
+        sdl.RenderFillRectF(renderer, &player_rect)
+        // -------------------------------------------
         scale := 4
-        text : string = "Game paused !" 
+        score_step -= 10
+        if score_step <= 0 {
+            score += 1
+            score_step = 1000
+        }
+
+        if score >= max_score {
+            max_score = score
+        }
+
+        text := fmt.tprintf("Score: %v", score)
+        text_length := FONT_CHAR_WIDTH*len(text)*scale
+        render_text(renderer, 
+            i32(WIDTH/2 - text_length/2), 10, 
+            text, i32(scale), WHITE)
+
+        if !pause {
+            if ball_rect.x < 0 || ball_rect.x + ball_rect.w > WIDTH  {ball_dx *= -1}
+            if ball_rect.y < 0 || ball_rect.y + ball_rect.h > HEIGHT {ball_dy *= -1}
+            ball_rect.x += ball_dx*ball_speed*dt
+            ball_rect.y += ball_dy*ball_speed*dt
+
+            // Wall loose condition
+            if player_rect.x < 0 || player_rect.x + player_rect.w > WIDTH  {game_state = .LOST}
+            if player_rect.y < 0 || player_rect.y + player_rect.h > HEIGHT {game_state = .LOST}
+            // ball loose condition
+            if sdl.HasIntersectionF(&ball_rect, &player_rect) {game_state = .LOST}
+
+            player_rect.x += player_dx*player_speed*dt
+            player_rect.y += player_dy*player_speed*dt
+
+        }
+        else {
+            scale := 4
+            text : string = "Game paused!" 
+            text_length := FONT_CHAR_WIDTH*len(text)*scale
+            render_text(renderer, 
+                i32(WIDTH/2 - text_length/2), i32(HEIGHT/2 - FONT_CHAR_HEIGHT/2), 
+                text, i32(scale), GREEN)
+        }
+        sdl.RenderPresent(renderer)
+    case .LOST:
+        set_unhexed_color(renderer, RED)
+        sdl.RenderClear(renderer)
+
+        // "You lost" text rendering
+        scale := 4
+        text : string = "You lost!" 
         text_length := FONT_CHAR_WIDTH*len(text)*scale
         render_text(renderer, 
             i32(WIDTH/2 - text_length/2), i32(HEIGHT/2 - FONT_CHAR_HEIGHT/2), 
-            text, i32(scale))
+            text, i32(scale), WHITE)
+
+        sdl.RenderPresent(renderer)
     }
-    sdl.RenderPresent(renderer)
 }
 
 main :: proc() {
@@ -152,6 +218,9 @@ main :: proc() {
 
     event: sdl.Event
     quit := false
+    lost := false
+
+    game_state = .PLAYING
 
     // frame cap
     for !quit {
@@ -160,12 +229,24 @@ main :: proc() {
 			case .QUIT:
                 quit = true
 			case .KEYDOWN:
-				#partial switch event.key.keysym.scancode {
+                #partial switch event.key.keysym.scancode {
 				case .ESCAPE:
-					quit = true
+                    quit = true
                 case .SPACE:
                     pause = !pause
-				}
+                case .A:
+                    player_dx = -1
+                    player_dy = 0
+                case .W:
+                    player_dy = -1
+                    player_dx = 0
+                case .S:
+                    player_dy = 1
+                    player_dx = 0
+                case .D:
+                    player_dx = 1
+                    player_dy = 0
+                }
 			}
         }
 
