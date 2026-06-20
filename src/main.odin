@@ -21,6 +21,7 @@ FONT_ATLAS_ROWS :: 6
 
 RED   ::      0xFF0000FF
 BLACK ::      0x000000FF
+GREEN ::      0x00FF00FF
 WHITE ::      0xFFFFFFFF
 BACKGROUND :: 0x181818FF
 
@@ -41,13 +42,19 @@ set_unhexed_color :: proc(renderer: ^sdl.Renderer, hex_color: u32) {
     )
 }
 
-create_texture_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring) -> ^sdl.Texture {
+create_texture_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring, color: u32) -> ^sdl.Texture {
     font_surface := img.Load(filepath)
     if font_surface == nil {
         fmt.println("File does not exist")
         return nil
     }
+
+    sdl.SetSurfaceColorMod(font_surface,
+        u8((color >> (8*3)) & 0xFF),
+        u8((color >> (8*2)) & 0xFF),
+        u8((color >> (8*1)) & 0xFF))
     defer sdl.FreeSurface(font_surface)
+
     font_texture := sdl.CreateTextureFromSurface(renderer, font_surface)
     return font_texture
 }
@@ -62,8 +69,9 @@ create_surface_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring) -> 
     return font_surface
 }
 
+// NOTE: color format is RRGGBB
 render_text :: proc(renderer: ^sdl.Renderer, x, y: i32, text: string, scale: i32, filepath: cstring="./assets/ascii.png") {
-    font_surface := create_surface_from_font(renderer, filepath)
+    //font_surface := create_surface_from_font(renderer, filepath)
 
     for char, index in text {
         char_index := char - 32
@@ -84,7 +92,7 @@ render_text :: proc(renderer: ^sdl.Renderer, x, y: i32, text: string, scale: i32
             h = FONT_CHAR_HEIGHT*scale
         }
 
-        font_texture := create_texture_from_font(renderer, filepath)
+        font_texture := create_texture_from_font(renderer, filepath, GREEN)
         sdl.RenderCopy(renderer, font_texture, &src_rect, &dst_rect);
         defer sdl.DestroyTexture(font_texture)
     }
