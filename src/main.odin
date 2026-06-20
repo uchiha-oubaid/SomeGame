@@ -2,6 +2,7 @@ package main
 
 import     "core:fmt"
 import     "core:c"
+//import math"core:math/linalg/hlsl"
 import sdl "vendor:sdl2"
 import img "vendor:sdl2/image"
 
@@ -15,6 +16,9 @@ FONT_ATLAS_HEIGHT :: 48
 FONT_CHAR_WIDTH :: 6
 FONT_CHAR_HEIGHT :: 8
 
+FONT_ATLAS_COLS :: 16
+FONT_ATLAS_ROWS :: 6
+
 RED   ::      0xFF0000FF
 BLACK ::      0x000000FF
 WHITE ::      0xFFFFFFFF
@@ -22,8 +26,8 @@ BACKGROUND :: 0x181818FF
 
 ball_dx, ball_dy :f32 = 1, 1
 ball_rect : sdl.FRect = sdl.FRect {
-    x = 0,
-    y = 0,
+    x = 50,
+    y = 10,
     w = 50,
     h = 50
 }
@@ -48,64 +52,69 @@ create_texture_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring) -> 
     return font_texture
 }
 
-render_char :: proc(renderer :^sdl.Renderer, filepath: cstring, x, y: i32, char: c.char, scale: i32) {
-    char_index := i32(char) - 32
-    char_col := char_index % FONT_ATLAS_WIDTH
-    char_row := char_index / FONT_ATLAS_WIDTH
-
-    src_rect := sdl.Rect {
-        x = char_col*FONT_ATLAS_WIDTH,
-        y = char_row*FONT_ATLAS_HEIGHT,
-        w = FONT_CHAR_WIDTH,
-        h = FONT_CHAR_HEIGHT
+create_surface_from_font :: proc(renderer: ^sdl.Renderer, filepath: cstring) -> ^sdl.Surface {
+    font_surface := img.Load(filepath)
+    if font_surface == nil {
+        fmt.println("File does not exist")
+        return nil
     }
-    dst_rect := sdl.Rect {
-        x = x,
-        y = y,
-        w = FONT_CHAR_WIDTH*scale,
-        h = FONT_CHAR_HEIGHT*scale
-    }
-    char_font := create_texture_from_font(renderer, filepath)
-    sdl.RenderCopy(renderer, char_font, &src_rect, &dst_rect);
-    defer sdl.DestroyTexture(char_font)
+    defer sdl.FreeSurface(font_surface)
+    return font_surface
 }
 
-render_string :: proc(renderer: ^sdl.Renderer, text: cstring, scale: i32) {
-    filepath : cstring = "./assets/ascii.png"
-    src_rect := sdl.Rect {
-        x = 0,
-        y = 0,
-        w = FONT_ATLAS_WIDTH,
-        h = FONT_ATLAS_HEIGHT
+render_text :: proc(renderer: ^sdl.Renderer, x, y: i32, text: string, scale: i32, filepath: cstring="./assets/ascii.png") {
+    font_surface := create_surface_from_font(renderer, filepath)
+
+    for char, index in text {
+        char_index := char - 32
+        i_index := i32(index)
+
+        char_col := i32(char_index % FONT_ATLAS_COLS)
+        char_row := i32(char_index / FONT_ATLAS_COLS)
+        src_rect := sdl.Rect {
+            x = char_col*FONT_CHAR_WIDTH,
+            y = char_row*FONT_CHAR_HEIGHT,
+            w = FONT_CHAR_WIDTH,
+            h = FONT_CHAR_HEIGHT
+        }
+        dst_rect := sdl.Rect {
+            x = x+i_index*FONT_CHAR_WIDTH*scale,
+            y = y,
+            w = FONT_CHAR_WIDTH*scale,
+            h = FONT_CHAR_HEIGHT*scale
+        }
+
+        font_texture := create_texture_from_font(renderer, filepath)
+        sdl.RenderCopy(renderer, font_texture, &src_rect, &dst_rect);
+        defer sdl.DestroyTexture(font_texture)
     }
-    dst_rect := sdl.Rect {
-        x = 0,
-        y = 0,
-        w = FONT_ATLAS_WIDTH*scale,
-        h = FONT_ATLAS_HEIGHT*scale
-    }
-    font := create_texture_from_font(renderer, filepath)
-    sdl.RenderCopy(renderer, font, &src_rect, &dst_rect);
-    defer sdl.DestroyTexture(font)
 }
 
+pause := false
 render_and_update :: proc(renderer: ^sdl.Renderer, dt: f32) {
     set_unhexed_color(renderer, BACKGROUND)
     sdl.RenderClear(renderer)
-    // renderering here
 
-    //render_string(renderer, "test", 4)
-    render_char(renderer, "/home/lOobaid/code/odin-game/assets/ascii.png", 10, 10, 'c', 5)
-
+    // TODO replace the rect with an actual texture
     ball_speed :f32 = 500
     set_unhexed_color(renderer, RED)
-    if ball_rect.x < 0 || ball_rect.x + ball_rect.w > WIDTH  {ball_dx *= -1}
-    if ball_rect.y < 0 || ball_rect.y + ball_rect.h > HEIGHT {ball_dy *= -1}
-
-    ball_rect.x += ball_dx*ball_speed*dt
-    ball_rect.y += ball_dy*ball_speed*dt
-
     sdl.RenderFillRectF(renderer, &ball_rect)
+    // -------------------------------------------
+
+    if !pause {
+        if ball_rect.x < 0 || ball_rect.x + ball_rect.w > WIDTH  {ball_dx *= -1}
+        if ball_rect.y < 0 || ball_rect.y + ball_rect.h > HEIGHT {ball_dy *= -1}
+        ball_rect.x += ball_dx*ball_speed*dt
+        ball_rect.y += ball_dy*ball_speed*dt
+    }
+    else {
+        scale := 4
+        text : string = "Game paused !" 
+        text_length := FONT_CHAR_WIDTH*len(text)*scale
+        render_text(renderer, 
+            i32(WIDTH/2 - text_length/2), i32(HEIGHT/2 - FONT_CHAR_HEIGHT/2), 
+            text, i32(scale))
+    }
     sdl.RenderPresent(renderer)
 }
 
@@ -135,7 +144,6 @@ main :: proc() {
 
     event: sdl.Event
     quit := false
-    pause := false
 
     // frame cap
     for !quit {
@@ -153,11 +161,7 @@ main :: proc() {
 			}
         }
 
-        if !pause {
-            render_and_update(renderer, DELTA_TIME)
-        }else {
-            // TODO add text indicating pausing
-        }
+        render_and_update(renderer, DELTA_TIME)
         sdl.Delay(1000 / FPS)
     }
 }
