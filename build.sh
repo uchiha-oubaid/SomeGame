@@ -1,5 +1,7 @@
 #!/usr/bin/bash
 
+# COMMENT
+
 if [ -d ./build/ ]; then
     time odin build src -out:build/Test -debug && ./build/Test
 else
